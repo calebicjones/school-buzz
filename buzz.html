@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- Native Android / Capacitor Status Bar & Webview Tags -->
+    <title>School Buzz - YMCA Buwambo Campus Native App</title>
+    <meta name="description" content="The official School Buzz mobile app for YMCA Buwambo Campus. Real-time news, anonymous confessions, guild updates, admin tools, and student marketplace.">
+    <meta name="theme-color" content="#1e3a8a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Capacitor / Cordova Core Script Fallback Bridge -->
+    <script>
+        window.Capacitor = window.Capacitor || {};
+    </script>
+
+    <!-- Google Fonts & FontAwesome CDN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        buzzBlue: {
+                            500: '#2563eb',
+                            600: '#1d4ed8',
+                            800: '#1e3a8a',
+                            900: '#0f172a',
+                        },
+                        buzzRed: {
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom CSS Styles -->
+    <style>
+        * {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: #05070c;
+            color: #f8fafc;
+            min-height: 100vh;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .glass-nav {
+            background: rgba(5, 7, 12, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .mobile-dock {
+            background: rgba(5, 7, 12, 0.98);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+        }
+
+        .glass-input {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #f8fafc;
+        }
+
+        .glass-input:focus {
+            outline: none;
+            border-color: #dc2626;
+            box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+        }
+
+        .btn-gradient-buzz {
+            background: linear-gradient(135deg, #1e3a8a 0%, #dc2626 100%);
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+        }
+
+        .btn-gradient-buzz:active {
+            transform: scale(0.96);
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'school-buzz-buwambo';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyDummyKeyForFallbackPurpose12345",
+                authDomain: "school-buzz-buwambo.firebaseapp.com",
+                projectId: "school-buzz-buwambo",
+                storageBucket: "school-buzz-buwambo.appspot.com",
+                messagingSenderId: "123456789",
+                appId: "1:123456789:web:abcdef123456"
+            };
+
+        let app, db, auth, currentUser = null;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            window.db = db;
+            window.appId = appId;
+        } catch(e) {
+            console.warn("Firebase Init fallback:", e);
+        }
+
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth Exception:", err);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                window.currentUserId = user.uid;
+                initRealtimeListeners();
+            } else {
+                initAuth();
+            }
+        });
+
+        // Real-time synchronization across all devices
+        function initRealtimeListeners() {
+            if (!db) return;
+
+            // 1. Campus Feed Listener
+            const newsRef = collection(db, 'artifacts', appId, 'public', 'data', 'news_posts');
+            onSnapshot(newsRef, (snapshot) => {
+                const posts = [];
+                snapshot.forEach(doc => posts.push({ id: doc.id, ...doc.data() }));
+                posts.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt - a.createdAt);
+                window.feedState = posts;
+                window.renderFeed();
+                if (window.isAdmin) window.renderAdminPanel();
+            }, (error) => console.error("News snapshot error:", error));
+
+            // 2. Guild Notices Listener
+            const guildRef = collection(db, 'artifacts', appId, 'public', 'data', 'guild_notices');
+            onSnapshot(guildRef, (snapshot) => {
+                const notices = [];
+                snapshot.forEach(doc => notices.push({ id: doc.id, ...doc.data() }));
+                notices.sort((a, b) => b.createdAt - a.createdAt);
+                window.guildState = notices;
+                window.renderGuildNotices();
+                if (window.isAdmin) window.renderAdminPanel();
+            }, (error) => console.error("Guild snapshot error:", error));
+
+            // 3. Anonymous Confessions Listener
+            const gossipRef = collection(db, 'artifacts', appId, 'public', 'data', 'gossip_posts');
+            onSnapshot(gossipRef, (snapshot) => {
+                const posts = [];
+                snapshot.forEach(doc => posts.push({ id: doc.id, ...doc.data() }));
+                posts.sort((a, b) => b.createdAt - a.createdAt);
+                window.gossipState = posts;
+                window.renderGossip();
+                if (window.isAdmin) window.renderAdminPanel();
+            }, (error) => console.error("Gossip snapshot error:", error));
+
+            // 4. Marketplace Items Listener
+            const marketRef = collection(db, 'artifacts', appId, 'public', 'data', 'market_items');
+            onSnapshot(marketRef, (snapshot) => {
+                const items = [];
+                snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+                items.sort((a, b) => b.createdAt - a.createdAt);
+                window.marketState = items;
+                window.renderMarketplace();
+                if (window.isAdmin) window.renderAdminPanel();
+            }, (error) => console.error("Market snapshot error:", error));
+        }
+
+        // Firestore Database Operations
+        window.saveNewsPost = async (postData) => {
+            if (!db) return;
+            const col = collection(db, 'artifacts', appId, 'public', 'data', 'news_posts');
+            await addDoc(col, { ...postData, createdAt: Date.now(), likes: 0, likedBy: [], comments: [], userId: window.currentUserId });
+        };
+
+        window.saveGuildNotice = async (noticeData) => {
+            if (!db) return;
+            const col = collection(db, 'artifacts', appId, 'public', 'data', 'guild_notices');
+            await addDoc(col, { ...noticeData, createdAt: Date.now(), author: noticeData.author || "Guild Cabinet", userId: window.currentUserId });
+        };
+
+        window.saveGossipPost = async (postData) => {
+            if (!db) return;
+            const col = collection(db, 'artifacts', appId, 'public', 'data', 'gossip_posts');
+            await addDoc(col, { ...postData, createdAt: Date.now(), upvotes: 0, downvotes: 0, userId: window.currentUserId });
+        };
+
+        window.saveMarketItem = async (itemData) => {
+            if (!db) return;
+            const col = collection(db, 'artifacts', appId, 'public', 'data', 'market_items');
+            await addDoc(col, { ...itemData, createdAt: Date.now(), status: 'Available', userId: window.currentUserId });
+        };
+
+        window.deletePostById = async (collectionName, docId) => {
+            if (!db) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId);
+            await deleteDoc(docRef);
+        };
+
+        window.toggleLikeNews = async (docId, currentLikes, likedBy = []) => {
+            if (!db) return;
+            const uid = window.currentUserId;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'news_posts', docId);
+            const hasLiked = likedBy.includes(uid);
+            const newLikedBy = hasLiked ? likedBy.filter(id => id !== uid) : [...likedBy, uid];
+            const newCount = hasLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
+            await updateDoc(docRef, { likes: newCount, likedBy: newLikedBy });
+            if (navigator.vibrate) navigator.vibrate(25);
+        };
+
+        window.togglePinNews = async (docId, currentPinned) => {
+            if (!db) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'news_posts', docId);
+            await updateDoc(docRef, { pinned: !currentPinned });
+        };
+    </script>
+</head>
+
+<body class="antialiased selection:bg-buzzRed-600 selection:text-white pb-24 md:pb-0">
+
+    <div id="toast-container" class="fixed top-6 right-4 left-4 z-50 flex flex-col gap-2 max-w-sm mx-auto w-full pointer-events-none"></div>
+
+    <!-- HEADER / NAVIGATION -->
+    <header class="glass-nav sticky top-0 z-40 w-full transition-all duration-200">
+        <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-2">
+            
+            <!-- School Buzz Logo Branding -->
+            <div class="flex items-center space-x-2.5 cursor-pointer shrink-0" onclick="switchTab('feed')">
+                <div class="w-10 h-10 rounded-xl bg-white p-1 shadow-lg flex items-center justify-center shrink-0 border border-slate-200">
+                    <svg viewBox="0 0 200 200" class="w-full h-full">
+                        <polygon points="100,20 180,60 100,100 20,60" fill="#dc2626"/>
+                        <polygon points="100,100 180,60 180,75 100,115" fill="#b91c1c"/>
+                        <rect x="35" y="67" width="8" height="35" fill="#dc2626"/>
+                        <circle cx="39" cy="105" r="7" fill="#dc2626"/>
+                        <path d="M40,110 Q100,130 100,180 Q40,150 40,110 Z" fill="#1e3a8a"/>
+                        <path d="M160,110 Q100,130 100,180 Q160,150 160,110 Z" fill="#dc2626"/>
+                        <path d="M100,125 Q145,135 145,168" stroke="#ffffff" stroke-width="5" fill="none"/>
+                        <path d="M100,140 Q145,150 145,168" stroke="#ffffff" stroke-width="5" fill="none"/>
+                    </svg>
+                </div>
+
+                <div class="flex flex-col">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-base font-black tracking-tight text-white uppercase">
+                            School<span class="text-buzzRed-500">Buzz</span>
+                        </span>
+                        <span id="admin-badge" class="hidden text-[8px] uppercase font-extrabold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">Caleb Admin</span>
+                    </div>
+                    <p class="text-[9px] text-slate-400 font-medium leading-none">YMCA Buwambo Campus</p>
+                </div>
+            </div>
+
+            <!-- Native Search Field & Admin Button -->
+            <div class="flex items-center space-x-2">
+                <div class="relative w-32 sm:w-44">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" id="global-search" oninput="handleSearch(this.value)" placeholder="Search..." class="glass-input pl-8 pr-2 py-1.5 rounded-full text-xs w-full">
+                </div>
+                <button onclick="openModal('modal-admin-login')" id="btn-admin-trigger" class="px-2.5 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 hover:text-white hover:border-amber-500 transition-all">
+                    <i class="fa-solid fa-shield-halved text-amber-400"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-4 flex-grow w-full">
+
+        <!-- ================= TAB 1: CAMPUS FEED ================= -->
+        <section id="tab-feed" class="tab-content space-y-4">
+            <div class="glass-panel rounded-3xl p-5 border border-buzzRed-600/30 bg-gradient-to-r from-buzzBlue-800/90 via-slate-900 to-slate-950">
+                <span class="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wider uppercase bg-buzzRed-600/20 text-buzzRed-400 border border-buzzRed-600/40 inline-block mb-2">
+                    YMCA Comprehensive Institute
+                </span>
+                <h1 class="text-xl font-black text-white">Campus Feed</h1>
+                <p class="text-xs text-slate-300 mt-1">Open campus posts, notices, and student updates.</p>
+                
+                <button onclick="openModal('modal-create-feed')" class="mt-3 w-full py-2.5 rounded-xl text-xs font-bold btn-gradient-buzz text-white flex items-center justify-center space-x-2 shadow-lg">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>Post Campus Buzz (Everyone Can Post)</span>
+                </button>
+            </div>
+
+            <div id="feed-container" class="space-y-4"></div>
+        </section>
+
+        <!-- ================= TAB 2: GUILD CABINET & OFFICIAL NOTICES ================= -->
+        <section id="tab-guild" class="tab-content hidden space-y-4">
+            <div class="glass-panel rounded-3xl p-5 border border-blue-500/30 bg-gradient-to-r from-blue-950 via-slate-900 to-slate-950">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wider uppercase bg-blue-500/20 text-blue-400 border border-blue-500/40 inline-block mb-2">
+                            Official Desk
+                        </span>
+                        <h2 class="text-xl font-black text-white flex items-center">
+                            <i class="fa-solid fa-building-columns text-blue-400 mr-2"></i> Guild Cabinet Messages
+                        </h2>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-300 mt-1">Official announcements from the YMCA Guild President, Cabinet, & Campus Administration.</p>
+                
+                <div id="guild-admin-action" class="hidden mt-3">
+                    <button onclick="openModal('modal-create-guild')" class="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-bullhorn"></i>
+                        <span>Publish Official Guild Notice (Admin Caleb)</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="guild-container" class="space-y-4"></div>
+        </section>
+
+        <!-- ================= TAB 3: ANONYMOUS CONFESSIONS ================= -->
+        <section id="tab-gossip" class="tab-content hidden space-y-4">
+            <div class="glass-panel rounded-3xl p-5 border border-pink-500/20 bg-gradient-to-r from-slate-900 via-slate-900/90 to-pink-950/30">
+                <h2 class="text-lg font-black text-white flex items-center">
+                    <i class="fa-solid fa-mask text-pink-400 mr-2"></i> Anonymous Confessions
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">100% secret & encrypted campus chatter. Post freely without showing your name.</p>
+                <button onclick="openModal('modal-create-gossip')" class="mt-3 w-full py-2.5 rounded-xl text-xs font-bold bg-pink-600 hover:bg-pink-500 text-white shadow-lg flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-user-secret"></i>
+                    <span>Post Anonymous Confession</span>
+                </button>
+            </div>
+
+            <div id="gossip-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </section>
+
+        <!-- ================= TAB 4: STUDENT MARKETPLACE ================= -->
+        <section id="tab-marketplace" class="tab-content hidden space-y-4">
+            <div class="glass-panel rounded-3xl p-4 border border-emerald-500/20 bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/30">
+                <h2 class="text-lg font-black text-white flex items-center">
+                    <i class="fa-solid fa-store text-emerald-400 mr-2"></i> Student Marketplace
+                </h2>
+                <p class="text-xs text-slate-300 mt-1">Buy & sell textbooks, phones, gadgets & hostel items directly with other students.</p>
+                <button onclick="openModal('modal-create-listing')" class="mt-3 w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>List Item For Sale</span>
+                </button>
+            </div>
+
+            <div id="marketplace-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </section>
+
+        <!-- ================= TAB 5: CALEB ADMIN DASHBOARD ================= -->
+        <section id="tab-admin" class="tab-content hidden space-y-4">
+            <div id="admin-dashboard-view">
+                <!-- Content generated dynamically when logged in as Caleb -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MOBILE BOTTOM NAVIGATION DOCK -->
+    <nav class="fixed bottom-0 left-0 right-0 z-50 mobile-dock px-3 py-2 flex items-center justify-around">
+        <button onclick="switchTab('feed')" id="dock-feed" class="flex flex-col items-center justify-center p-1.5 text-buzzRed-500 transition-all">
+            <i class="fa-solid fa-newspaper text-base"></i>
+            <span class="text-[9px] font-bold mt-0.5">Feed</span>
+        </button>
+
+        <button onclick="switchTab('guild')" id="dock-guild" class="flex flex-col items-center justify-center p-1.5 text-slate-400 hover:text-slate-200 transition-all">
+            <i class="fa-solid fa-building-columns text-base"></i>
+            <span class="text-[9px] font-bold mt-0.5">Guild</span>
+        </button>
+
+        <button onclick="switchTab('gossip')" id="dock-gossip" class="flex flex-col items-center justify-center p-1.5 text-slate-400 hover:text-slate-200 transition-all">
+            <i class="fa-solid fa-user-secret text-base"></i>
+            <span class="text-[9px] font-bold mt-0.5">Tea</span>
+        </button>
+
+        <button onclick="switchTab('marketplace')" id="dock-marketplace" class="flex flex-col items-center justify-center p-1.5 text-slate-400 hover:text-slate-200 transition-all">
+            <i class="fa-solid fa-store text-base"></i>
+            <span class="text-[9px] font-bold mt-0.5">Market</span>
+        </button>
+
+        <button onclick="handleAdminTabClick()" id="dock-admin" class="flex flex-col items-center justify-center p-1.5 text-amber-500/70 hover:text-amber-400 transition-all">
+            <i class="fa-solid fa-shield-halved text-base"></i>
+            <span class="text-[9px] font-bold mt-0.5">Caleb</span>
+        </button>
+    </nav>
+
+    <!-- MODALS SECTION -->
+    
+    <!-- Admin Login Modal -->
+    <div id="modal-admin-login" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-sm rounded-3xl p-6 border border-amber-500/30 space-y-4 relative">
+            <button onclick="closeModal('modal-admin-login')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <div class="text-center space-y-1">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mx-auto text-xl">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <h3 class="text-lg font-extrabold text-white">Admin Control Unlock</h3>
+                <p class="text-xs text-slate-400">Restricted access for Caleb</p>
+            </div>
+            <form onsubmit="handleAdminLogin(event)" class="space-y-3">
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Username</label>
+                    <input type="text" id="admin-user" required placeholder="Enter username" class="glass-input w-full rounded-xl px-3 py-2 text-xs mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Password</label>
+                    <input type="password" id="admin-pass" required placeholder="Enter password" class="glass-input w-full rounded-xl px-3 py-2 text-xs mt-1">
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all">Unlock Admin Tools</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Campus Feed Post Modal (Open for Everyone) -->
+    <div id="modal-create-feed" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-lg rounded-3xl p-6 border border-buzzRed-600/30 space-y-4 relative">
+            <button onclick="closeModal('modal-create-feed')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center"><i class="fa-solid fa-pen-to-square text-buzzRed-500 mr-2"></i> Create Campus Post</h3>
+            <form onsubmit="handleFeedSubmit(event)" class="space-y-3">
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Headline</label>
+                    <input type="text" id="feed-title" required placeholder="e.g. Guild Sports Day / Football Match" class="glass-input w-full rounded-xl px-3 py-2 text-xs mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Category</label>
+                    <select id="feed-category" class="glass-input w-full rounded-xl px-3 py-2 text-xs mt-1 bg-slate-900">
+                        <option value="Campus News">Campus News</option>
+                        <option value="Academics">Academics & Exams</option>
+                        <option value="Sports & Events">Sports & Events</option>
+                        <option value="Hostel Life">Hostel Life</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Details</label>
+                    <textarea id="feed-content" required rows="3" placeholder="Share announcement details with all students..." class="glass-input w-full rounded-xl p-3 text-xs mt-1"></textarea>
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Attach Photo (Optional)</label>
+                    <input type="file" id="feed-image" accept="image/*" class="glass-input w-full rounded-xl p-2 text-xs mt-1 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-buzzRed-600 file:text-white file:text-xs">
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl text-xs font-bold btn-gradient-buzz text-white">Publish to Campus</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Guild Notice Modal (Admin Only) -->
+    <div id="modal-create-guild" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-lg rounded-3xl p-6 border border-blue-500/30 space-y-4 relative">
+            <button onclick="closeModal('modal-create-guild')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center"><i class="fa-solid fa-bullhorn text-blue-400 mr-2"></i> Official Guild Announcement</h3>
+            <form onsubmit="handleGuildSubmit(event)" class="space-y-3">
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Title</label>
+                    <input type="text" id="guild-title" required placeholder="e.g. End of Semester Exam Timetable" class="glass-input w-full rounded-xl px-3 py-2 text-xs mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Official Author Tag</label>
+                    <input type="text" id="guild-author" value="Office of the Guild President" class="glass-input w-full rounded-xl px-3 py-2 text-xs mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Announcement Content</label>
+                    <textarea id="guild-content" required rows="4" placeholder="Write official message..." class="glass-input w-full rounded-xl p-3 text-xs mt-1"></textarea>
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white">Broadcast Guild Message</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Anonymous Confession Modal -->
+    <div id="modal-create-gossip" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-lg rounded-3xl p-6 border border-pink-500/30 space-y-4 relative">
+            <button onclick="closeModal('modal-create-gossip')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center"><i class="fa-solid fa-user-secret text-pink-400 mr-2"></i> Anonymous Confession</h3>
+            <form onsubmit="handleGossipSubmit(event)" class="space-y-3">
+                <div>
+                    <textarea id="gossip-content" required rows="4" placeholder="Speak freely... No names or phone details are attached to this confession." class="glass-input w-full rounded-xl p-3 text-xs mt-1"></textarea>
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl text-xs font-bold bg-pink-600 hover:bg-pink-500 text-white">Submit Anonymously</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Marketplace Listing Modal -->
+    <div id="modal-create-listing" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-lg rounded-3xl p-6 border border-emerald-500/30 space-y-4 relative">
+            <button onclick="closeModal('modal-create-listing')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center"><i class="fa-solid fa-store text-emerald-400 mr-2"></i> List Item For Sale</h3>
+            <form onsubmit="handleMarketSubmit(event)" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <input type="text" id="market-title" required placeholder="Item Title" class="glass-input w-full rounded-xl px-3 py-2 text-xs">
+                    </div>
+                    <div>
+                        <input type="text" id="market-price" required placeholder="Price (UGX)" class="glass-input w-full rounded-xl px-3 py-2 text-xs">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <select id="market-category" class="glass-input w-full rounded-xl px-3 py-2 text-xs bg-slate-900">
+                            <option value="Textbooks & Notes">Textbooks & Notes</option>
+                            <option value="Electronics & Gadgets">Electronics & Gadgets</option>
+                            <option value="Hostel & Dorm Gear">Hostel & Dorm Gear</option>
+                            <option value="Fashion & Shoes">Fashion & Shoes</option>
+                        </select>
+                    </div>
+                    <div>
+                        <input type="text" id="market-phone" required placeholder="WhatsApp Number" class="glass-input w-full rounded-xl px-3 py-2 text-xs">
+                    </div>
+                </div>
+                <div>
+                    <textarea id="market-desc" required rows="2" placeholder="Item details..." class="glass-input w-full rounded-xl p-3 text-xs"></textarea>
+                </div>
+                <div>
+                    <input type="file" id="market-image" accept="image/*" class="glass-input w-full rounded-xl p-2 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white file:text-xs">
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white">Post Item</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT APPLICATION LOGIC -->
+    <script>
+        window.isAdmin = false;
+        window.feedState = [];
+        window.guildState = [];
+        window.gossipState = [];
+        window.marketState = [];
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            const target = document.getElementById(`tab-${tabName}`);
+            if (target) target.classList.remove('hidden');
+
+            const activeColors = {
+                feed: 'text-buzzRed-500',
+                guild: 'text-blue-400',
+                gossip: 'text-pink-400',
+                marketplace: 'text-emerald-400',
+                admin: 'text-amber-400'
+            };
+
+            ['feed', 'guild', 'gossip', 'marketplace', 'admin'].forEach(tab => {
+                const dockBtn = document.getElementById(`dock-${tab}`);
+                if (dockBtn) {
+                    dockBtn.className = tab === tabName 
+                        ? `flex flex-col items-center justify-center p-1.5 ${activeColors[tab]} transition-all scale-105`
+                        : 'flex flex-col items-center justify-center p-1.5 text-slate-400 transition-all';
+                }
+            });
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (navigator.vibrate) navigator.vibrate(10);
+            
+            if (tabName === 'admin') window.renderAdminPanel();
+        }
+
+        function handleAdminTabClick() {
+            if (window.isAdmin) {
+                switchTab('admin');
+            } else {
+                openModal('modal-admin-login');
+            }
+        }
+
+        function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const bgClass = type === 'amber' ? 'bg-amber-600' : 'bg-buzzRed-600';
+            toast.className = `p-3 rounded-2xl text-xs font-bold text-white ${bgClass} shadow-2xl flex items-center space-x-2 transition-all duration-300 pointer-events-auto`;
+            toast.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>${msg}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        }
+
+        function handleAdminLogin(e) {
+            e.preventDefault();
+            const user = document.getElementById('admin-user').value.trim();
+            const pass = document.getElementById('admin-pass').value.trim();
+
+            if (user === 'Caleb' && pass === 'calebicjones') {
+                window.isAdmin = true;
+                document.getElementById('admin-badge').classList.remove('hidden');
+                document.getElementById('guild-admin-action').classList.remove('hidden');
+                closeModal('modal-admin-login');
+                showToast('Welcome back Caleb! Admin privileges unlocked.', 'amber');
+                switchTab('admin');
+            } else {
+                showToast('Invalid Admin Credentials', 'error');
+            }
+        }
+
+        function handleAdminLogout() {
+            window.isAdmin = false;
+            document.getElementById('admin-badge').classList.add('hidden');
+            document.getElementById('guild-admin-action').classList.add('hidden');
+            showToast('Logged out of Admin Control');
+            switchTab('feed');
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Render Campus Feed
+        window.renderFeed = () => {
+            const container = document.getElementById('feed-container');
+            if (!container) return;
+            if (!window.feedState || window.feedState.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-panel rounded-3xl p-8 text-center space-y-3">
+                        <i class="fa-solid fa-newspaper text-3xl text-slate-500"></i>
+                        <h3 class="text-sm font-bold text-white">No Campus Posts Yet</h3>
+                        <p class="text-xs text-slate-400">Be the first student to post on the Buwambo feed!</p>
+                        <button onclick="openModal('modal-create-feed')" class="px-4 py-2 rounded-xl text-xs font-bold btn-gradient-buzz text-white">Post First Update</button>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = window.feedState.map(post => `
+                <div class="glass-card rounded-2xl p-4 space-y-3 ${post.pinned ? 'border border-buzzRed-600/50 bg-buzzRed-950/20' : ''}">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-7 h-7 rounded-full bg-buzzRed-600/30 text-buzzRed-400 font-bold text-xs flex items-center justify-center">SB</div>
+                            <div>
+                                <h4 class="text-xs font-bold text-white">${post.category || 'Campus Post'}</h4>
+                                <p class="text-[9px] text-slate-400">${new Date(post.createdAt).toLocaleDateString()} ${new Date(post.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            </div>
+                        </div>
+                        ${post.pinned ? '<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-buzzRed-600 text-white"><i class="fa-solid fa-thumbtack mr-1"></i> Pinned</span>' : ''}
+                    </div>
+                    <h3 class="text-sm font-extrabold text-white">${post.title}</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed">${post.content}</p>
+                    ${post.image ? `<img src="${post.image}" class="w-full max-h-64 object-cover rounded-xl border border-slate-800">` : ''}
+                    
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+                        <button onclick="window.toggleLikeNews('${post.id}', ${post.likes || 0}, ${JSON.stringify(post.likedBy || [])})" class="flex items-center space-x-1.5 text-slate-400 hover:text-buzzRed-400">
+                            <i class="fa-solid fa-heart ${post.likedBy?.includes(window.currentUserId) ? 'text-buzzRed-500' : ''}"></i>
+                            <span class="font-bold">${post.likes || 0} Likes</span>
+                        </button>
+                        ${window.isAdmin ? `<button onclick="window.deletePostById('news_posts', '${post.id}')" class="text-rose-400 text-[10px] font-bold"><i class="fa-solid fa-trash mr-1"></i> Delete</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        };
+
+        // Render Guild Notices
+        window.renderGuildNotices = () => {
+            const container = document.getElementById('guild-container');
+            if (!container) return;
+            if (!window.guildState || window.guildState.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-panel rounded-3xl p-8 text-center space-y-3 border border-blue-500/20">
+                        <i class="fa-solid fa-building-columns text-3xl text-blue-400"></i>
+                        <h3 class="text-sm font-bold text-white">No Guild Announcements Yet</h3>
+                        <p class="text-xs text-slate-400">Official guild notices will appear here instantly when published.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = window.guildState.map(notice => `
+                <div class="glass-card rounded-2xl p-4 space-y-3 border border-blue-500/30 bg-blue-950/10">
+                    <div class="flex items-center justify-between">
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                            <i class="fa-solid fa-award mr-1"></i> ${notice.author || 'Guild Cabinet'}
+                        </span>
+                        <span class="text-[9px] text-slate-400">${new Date(notice.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <h3 class="text-sm font-black text-white">${notice.title}</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed">${notice.content}</p>
+                    ${window.isAdmin ? `
+                        <div class="pt-2 border-t border-slate-800 text-right">
+                            <button onclick="window.deletePostById('guild_notices', '${notice.id}')" class="text-rose-400 text-[10px] font-bold"><i class="fa-solid fa-trash mr-1"></i> Delete Notice</button>
+                        </div>` : ''}
+                </div>
+            `).join('');
+        };
+
+        // Render Anonymous Confessions
+        window.renderGossip = () => {
+            const container = document.getElementById('gossip-container');
+            if (!container) return;
+            if (!window.gossipState || window.gossipState.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-panel rounded-3xl p-8 text-center space-y-3 col-span-full">
+                        <i class="fa-solid fa-user-secret text-3xl text-pink-400"></i>
+                        <h3 class="text-sm font-bold text-white">No Confessions Yet</h3>
+                        <p class="text-xs text-slate-400">Share something secretly with campus!</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = window.gossipState.map(g => `
+                <div class="glass-card rounded-2xl p-4 space-y-2 border border-pink-500/20">
+                    <div class="flex items-center justify-between text-[10px] text-pink-400 font-bold">
+                        <span><i class="fa-solid fa-mask mr-1"></i> Anonymous Student</span>
+                        <span class="text-slate-500">${new Date(g.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <p class="text-xs text-slate-200 leading-relaxed">${g.content}</p>
+                    ${window.isAdmin ? `
+                        <div class="pt-2 border-t border-slate-800/60 text-right">
+                            <button onclick="window.deletePostById('gossip_posts', '${g.id}')" class="text-rose-400 text-[10px] font-bold"><i class="fa-solid fa-trash mr-1"></i> Delete</button>
+                        </div>` : ''}
+                </div>
+            `).join('');
+        };
+
+        // Render Marketplace
+        window.renderMarketplace = () => {
+            const container = document.getElementById('marketplace-container');
+            if (!container) return;
+            if (!window.marketState || window.marketState.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-panel rounded-3xl p-8 text-center space-y-3 col-span-full">
+                        <i class="fa-solid fa-store text-3xl text-emerald-400"></i>
+                        <h3 class="text-sm font-bold text-white">No Market Items Yet</h3>
+                        <p class="text-xs text-slate-400">Post items to sell to other Buwambo students.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = window.marketState.map(item => `
+                <div class="glass-card rounded-2xl p-3.5 space-y-2 border border-emerald-500/20">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">${item.category}</span>
+                            <h3 class="text-xs font-bold text-white mt-1">${item.title}</h3>
+                        </div>
+                        <span class="text-xs font-black text-emerald-400">UGX ${item.price}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">${item.desc}</p>
+                    ${item.image ? `<img src="${item.image}" class="w-full h-36 object-cover rounded-xl">` : ''}
+                    <a href="https://wa.me/256${item.phone.replace(/^0/, '')}?text=Hi,%20I'm%20interested%20in%20your%20item%20'${encodeURIComponent(item.title)}'%20listed%20on%20School%20Buzz." target="_blank" class="w-full py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center space-x-1">
+                        <i class="fa-brands fa-whatsapp"></i>
+                        <span>Contact Seller</span>
+                    </a>
+                    ${window.isAdmin ? `
+                        <button onclick="window.deletePostById('market_items', '${item.id}')" class="w-full py-1 text-center text-rose-400 text-[10px] font-bold"><i class="fa-solid fa-trash mr-1"></i> Delete Listing</button>` : ''}
+                </div>
+            `).join('');
+        };
+
+        // Render Caleb's Admin Dashboard
+        window.renderAdminPanel = () => {
+            const container = document.getElementById('admin-dashboard-view');
+            if (!container) return;
+
+            if (!window.isAdmin) {
+                container.innerHTML = `
+                    <div class="glass-panel rounded-3xl p-8 text-center space-y-3 border border-amber-500/30">
+                        <i class="fa-solid fa-lock text-3xl text-amber-400"></i>
+                        <h3 class="text-base font-extrabold text-white">Admin Control Locked</h3>
+                        <p class="text-xs text-slate-400">Please unlock with Caleb credentials.</p>
+                        <button onclick="openModal('modal-admin-login')" class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 text-slate-950">Unlock Admin Panel</button>
+                    </div>`;
+                return;
+            }
+
+            const totalNews = window.feedState?.length || 0;
+            const totalGuild = window.guildState?.length || 0;
+            const totalGossip = window.gossipState?.length || 0;
+            const totalMarket = window.marketState?.length || 0;
+
+            container.innerHTML = `
+                <div class="glass-panel rounded-3xl p-5 border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wider uppercase bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                                Administrator Control
+                            </span>
+                            <h2 class="text-xl font-black text-white mt-1">Caleb Admin Portal</h2>
+                        </div>
+                        <button onclick="handleAdminLogout()" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold">Logout</button>
+                    </div>
+
+                    <!-- App Stats -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                        <div class="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-center">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold">Campus Posts</p>
+                            <p class="text-lg font-black text-buzzRed-400">${totalNews}</p>
+                        </div>
+                        <div class="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-center">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold">Guild Notices</p>
+                            <p class="text-lg font-black text-blue-400">${totalGuild}</p>
+                        </div>
+                        <div class="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-center">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold">Confessions</p>
+                            <p class="text-lg font-black text-pink-400">${totalGossip}</p>
+                        </div>
+                        <div class="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 text-center">
+                            <p class="text-[10px] text-slate-400 uppercase font-bold">Market Items</p>
+                            <p class="text-lg font-black text-emerald-400">${totalMarket}</p>
+                        </div>
+                    </div>
+
+                    <!-- Quick Admin Broadcast Trigger -->
+                    <button onclick="openModal('modal-create-guild')" class="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-bullhorn"></i>
+                        <span>Broadcast Official Guild Announcement</span>
+                    </button>
+                </div>
+            `;
+        };
+
+        // Form Submit Handlers
+        async function handleFeedSubmit(e) {
+            e.preventDefault();
+            const title = document.getElementById('feed-title').value;
+            const category = document.getElementById('feed-category').value;
+            const content = document.getElementById('feed-content').value;
+            const imgFile = document.getElementById('feed-image').files[0];
+
+            let image = null;
+            if (imgFile) image = await fileToBase64(imgFile);
+
+            await window.saveNewsPost({ title, category, content, image });
+            closeModal('modal-create-feed');
+            e.target.reset();
+            showToast('Published to Campus!');
+        }
+
+        async function handleGuildSubmit(e) {
+            e.preventDefault();
+            const title = document.getElementById('guild-title').value;
+            const author = document.getElementById('guild-author').value;
+            const content = document.getElementById('guild-content').value;
+
+            await window.saveGuildNotice({ title, author, content });
+            closeModal('modal-create-guild');
+            e.target.reset();
+            showToast('Official Guild Notice Broadcasted!', 'amber');
+        }
+
+        async function handleGossipSubmit(e) {
+            e.preventDefault();
+            const content = document.getElementById('gossip-content').value;
+            await window.saveGossipPost({ content });
+            closeModal('modal-create-gossip');
+            e.target.reset();
+            showToast('Confession Submitted Anonymously!');
+        }
+
+        async function handleMarketSubmit(e) {
+            e.preventDefault();
+            const title = document.getElementById('market-title').value;
+            const price = document.getElementById('market-price').value;
+            const category = document.getElementById('market-category').value;
+            const phone = document.getElementById('market-phone').value;
+            const desc = document.getElementById('market-desc').value;
+            const imgFile = document.getElementById('market-image').files[0];
+
+            let image = null;
+            if (imgFile) image = await fileToBase64(imgFile);
+
+            await window.saveMarketItem({ title, price, category, phone, desc, image });
+            closeModal('modal-create-listing');
+            e.target.reset();
+            showToast('Item Listed on Market!');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            switchTab('feed');
+        });
+    </script>
+</body>
+</html>
